@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Veda 3D Scanner</title>
+    <style>
+      #error-overlay {
+        display: none;
+        position: fixed;
+        z-index: 99999;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.9);
+        color: #ff5555;
+        padding: 2rem;
+        font-family: monospace;
+        overflow: auto;
+      }
+      #error-overlay h2 { color: white; margin-top: 0; }
+    </style>
+    <script>
+      window.addEventListener('error', (e) => {
+        const overlay = document.getElementById('error-overlay');
+        overlay.style.display = 'block';
+        overlay.innerHTML += `<p>Error: ${e.message}<br/>at ${e.filename}:${e.lineno}</p>`;
+      });
+      window.addEventListener('unhandledrejection', (e) => {
+         const overlay = document.getElementById('error-overlay');
+         overlay.style.display = 'block';
+         overlay.innerHTML += `<p>Promise Rejection: ${e.reason?.message || e.reason}</p>`;
+      });
+      const originalError = console.error;
+      console.error = (...args) => {
+         originalError(...args);
+         const overlay = document.getElementById('error-overlay');
+         overlay.style.display = 'block';
+         overlay.innerHTML += `<p>Console Error: ${args.join(' ')}</p>`;
+      };
+    </script>
+  </head>
+  <body>
+    <div id="error-overlay"><h2>Application Error Detected</h2></div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
