@@ -19,28 +19,65 @@
       #error-overlay h2 { color: white; margin-top: 0; }
     </style>
     <script>
-      window.addEventListener('error', (e) => {
-        const overlay = document.getElementById('error-overlay');
-        overlay.style.display = 'block';
-        overlay.innerHTML += `<p>Error: ${e.message}<br/>at ${e.filename}:${e.lineno}</p>`;
-      });
-      window.addEventListener('unhandledrejection', (e) => {
-         const overlay = document.getElementById('error-overlay');
-         overlay.style.display = 'block';
-         overlay.innerHTML += `<p>Promise Rejection: ${e.reason?.message || e.reason}</p>`;
-      });
-      const originalError = console.error;
-      console.error = (...args) => {
-         originalError(...args);
-         const overlay = document.getElementById('error-overlay');
-         overlay.style.display = 'block';
-         overlay.innerHTML += `<p>Console Error: ${args.join(' ')}</p>`;
+      // Hook console.error to show React rendering errors
+      const _error = console.error;
+      console.error = function(...args) {
+        _error.apply(console, args);
+        const message = args.map(arg => {
+          if (arg instanceof Error) {
+            return `${arg.message}\nStack: ${arg.stack}`;
+          }
+          if (typeof arg === 'object') {
+            try { return JSON.stringify(arg, null, 2); } catch(e) { return String(arg); }
+          }
+          return String(arg);
+        }).join(' ');
+
+        // Only create overlay if document body exists
+        if (document.body) {
+          let div = document.getElementById('console-error-overlay');
+          if (!div) {
+            div = document.createElement('div');
+            div.id = 'console-error-overlay';
+            div.style.cssText = 'position:fixed;top:0;left:0;width:100%;z-index:999999;background:rgb(120, 10, 10);color:white;padding:30px;font-family:monospace;font-size:16px;white-space:pre-wrap;box-sizing:border-box;overflow:auto;height:100%;';
+            div.innerHTML = `<strong>Console Error Caught:</strong><br/><br/>`;
+            document.body.appendChild(div);
+          }
+          const p = document.createElement('pre');
+          p.style.margin = '10px 0';
+          p.style.borderBottom = '1px solid rgba(255,255,255,0.2)';
+          p.style.paddingBottom = '10px';
+          p.textContent = message;
+          div.appendChild(p);
+        }
       };
+
+      window.addEventListener('error', (e) => {
+        console.error("Global captured error:", e);
+        const div = document.createElement('div');
+        div.style.cssText = 'position:fixed;top:0;left:0;width:100%;z-index:999999;background:red;color:white;padding:30px;font-family:monospace;font-size:16px;white-space:pre-wrap;box-sizing:border-box;';
+        if (e.target && (e.target.src || e.target.href)) {
+          div.innerHTML = `<strong>Failed to load resource:</strong><br/>URL: ${e.target.src || e.target.href}<br/>Element: &lt;${e.target.tagName.toLowerCase()}&gt;`;
+        } else {
+          div.innerHTML = `<strong>Global Error Caught:</strong><br/>Message: ${e.message}<br/>Source: ${e.filename || 'unknown'}:${e.lineno || 0}:${e.colno || 0}<br/>Stack: ${e.error ? e.error.stack : 'No stack available'}`;
+        }
+        if (document.body) document.body.appendChild(div);
+      }, true);
+
+      window.addEventListener('unhandledrejection', (e) => {
+        console.error("Unhandled promise rejection:", e);
+        const div = document.createElement('div');
+        div.style.cssText = 'position:fixed;top:0;left:0;width:100%;z-index:999999;background:darkred;color:white;padding:30px;font-family:monospace;font-size:16px;white-space:pre-wrap;box-sizing:border-box;';
+        div.innerHTML = `<strong>Unhandled Rejection:</strong><br/>Reason: ${e.reason?.message || e.reason || 'Unknown reason'}<br/>Stack: ${e.reason?.stack || 'No stack available'}`;
+        if (document.body) document.body.appendChild(div);
+      });
     </script>
   </head>
   <body>
-    <div id="error-overlay"><h2>Application Error Detected</h2></div>
-    <div id="root"></div>
+    <div id="root" style="color: white; padding: 20px; font-family: sans-serif;">
+      <h2>Loading Veda 3D Scanner...</h2>
+      <p>If this screen remains blank, it means the application bundle failed to load or execute. Please open the browser console (Press <strong>F12</strong> or <strong>Ctrl+Shift+I</strong> / <strong>Cmd+Option+I</strong>) and copy the error messages here so we can fix them!</p>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
