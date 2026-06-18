@@ -23,12 +23,54 @@ export default function UploadFlow({ onComplete }: UploadFlowProps) {
   const [progress, setProgress] = useState(0);
   const [logs, setLogs] = useState<{id: number, text: string, type: 'sys' | 'proc' | 'info' | 'success'}[]>([]);
   
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const logIdRef = useRef(0);
   const stageIndexRef = useRef(0);
+  
+  const uploadCompletedRef = useRef(false);
+  const targetIdRef = useRef<string | null>(null);
+
+  const startReconstruction = (file: File) => {
+    setIsProcessing(true);
+    uploadCompletedRef.current = false;
+    targetIdRef.current = null;
+    setProgress(0);
+    setLogs([{ id: logIdRef.current++, text: `[SYSTEM] Ingestion started for: ${file.name}...`, type: 'sys' }]);
+
+    const formData = new FormData();
+    formData.append('video', file);
+
+    fetch('/api/scan', {
+      method: 'POST',
+      body: formData,
+    })
+      .then(res => {
+        if (!res.ok) throw new Error("Server pipeline failed.");
+        return res.json();
+      })
+      .then(data => {
+        console.log("[UPLOAD] Scan successful:", data);
+        targetIdRef.current = data.id;
+        uploadCompletedRef.current = true;
+      })
+      .catch(err => {
+        console.error("[UPLOAD] Scan failed:", err);
+        setLogs(prev => [
+          ...prev, 
+          { id: logIdRef.current++, text: `[ERROR] Reconstruction failed: ${err.message}`, type: 'sys' }
+        ]);
+        setTimeout(() => setIsProcessing(false), 4000);
+      });
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      startReconstruction(e.target.files[0]);
+    }
+  };
 
   const handleUploadClick = () => {
-    setIsProcessing(true);
-    setLogs([{ id: logIdRef.current++, text: "[SYSTEM] Initializing ingestion sequence...", type: 'sys' }]);
+    fileInputRef.current?.click();
   };
 
   useEffect(() => {
@@ -36,8 +78,15 @@ export default function UploadFlow({ onComplete }: UploadFlowProps) {
 
     let currentProgress = 0;
     const interval = setInterval(() => {
-      currentProgress += 1;
-      setProgress(currentProgress);
+      // Slow down simulated progress at 90% if the network request is still uploading
+      if (currentProgress < 90) {
+        currentProgress += 1;
+        setProgress(currentProgress);
+      } else if (uploadCompletedRef.current) {
+        currentProgress += 2;
+        if (currentProgress > 100) currentProgress = 100;
+        setProgress(currentProgress);
+      }
 
       const stage = Math.floor((currentProgress / 100) * STAGES.length);
       if (stage !== stageIndexRef.current && stage < STAGES.length) {
@@ -47,12 +96,12 @@ export default function UploadFlow({ onComplete }: UploadFlowProps) {
           ...prev, 
           { id: logIdRef.current++, text: `[PROCESS] ${STAGES[stage]}`, type: 'proc' }
         ]);
-      } else if (Math.random() > 0.75) {
+      } else if (Math.random() > 0.8) {
         const randomLogs = [
-          { text: `[INFO] Extracted ${100 + Math.floor(Math.random() * 200)} video keyframes`, type: 'info' },
+          { text: `[INFO] Extracted ${60 + Math.floor(Math.random() * 80)} keyframes`, type: 'info' },
           { text: `[INFO] Optimizing camera pose projection coordinates...`, type: 'info' },
-          { text: `[INFO] Allocating VRAM buffers & initializing PyTorch model...`, type: 'info' },
-          { text: `[SYSTEM] CUDA Kernel pipeline execution finished in ${Math.floor(Math.random() * 150) + 50}ms`, type: 'sys' }
+          { text: `[INFO] Allocating system buffers & initializing reconstruction...`, type: 'info' },
+          { text: `[SYSTEM] Pipeline check completed in ${Math.floor(Math.random() * 100) + 30}ms`, type: 'sys' }
         ];
         const selectedLog = randomLogs[Math.floor(Math.random() * randomLogs.length)];
         setLogs(prev => {
@@ -62,17 +111,17 @@ export default function UploadFlow({ onComplete }: UploadFlowProps) {
         });
       }
 
-      if (currentProgress >= 100) {
+      if (currentProgress >= 100 && uploadCompletedRef.current && targetIdRef.current) {
         clearInterval(interval);
         setLogs(prev => [
           ...prev, 
           { id: logIdRef.current++, text: `[SUCCESS] 3D Gaussian Splat model synthesized successfully.`, type: 'success' }
         ]);
         setTimeout(() => {
-          onComplete(`splat-${Date.now()}`);
+          onComplete(targetIdRef.current!);
         }, 1500);
       }
-    }, 60);
+    }, 80); // 8s total duration
 
     return () => clearInterval(interval);
   }, [isProcessing, onComplete]);
@@ -80,6 +129,15 @@ export default function UploadFlow({ onComplete }: UploadFlowProps) {
   return (
     <div className="w-full min-h-screen pt-28 pb-12 flex items-center justify-center bg-obsidian px-6 relative overflow-hidden">
       
+      {/* Hidden file input */}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        accept="video/*" 
+        className="hidden" 
+      />
+
       {/* Ambient backgrounds */}
       <div className="absolute inset-0 z-0 pointer-events-none bg-gradient-to-b from-transparent via-[#050508]/40 to-[#030303]" />
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-cyber-purple/5 rounded-full blur-[120px] pointer-events-none" />
@@ -105,7 +163,13 @@ export default function UploadFlow({ onComplete }: UploadFlowProps) {
             )}
             onDragEnter={() => setIsHovering(true)}
             onDragLeave={() => setIsHovering(false)}
-            onDrop={(e) => { e.preventDefault(); setIsHovering(false); handleUploadClick(); }}
+            onDrop={(e) => { 
+              e.preventDefault(); 
+              setIsHovering(false); 
+              if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                startReconstruction(e.dataTransfer.files[0]);
+              }
+            }}
             onDragOver={(e) => e.preventDefault()}
             onClick={handleUploadClick}
           >
@@ -145,7 +209,7 @@ export default function UploadFlow({ onComplete }: UploadFlowProps) {
                     </div>
                     <div>
                       <span className="text-xs font-mono uppercase tracking-widest text-cyber-purple">Processing Pipeline</span>
-                      <h3 className="text-xl font-display font-bold text-white">NeRF Engine Active</h3>
+                      <h3 className="text-xl font-display font-bold text-white">Reconstruction Active</h3>
                     </div>
                   </div>
                   

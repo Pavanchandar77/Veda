@@ -46,7 +46,7 @@ When you upload a video, Veda orchestrates a sophisticated multi-stage pipeline:
 5. 🌟 **Optimize Gaussian Splats** — Convert to highly efficient Gaussian primitives
 6. 🎯 **Finalize Mesh** — Produce a viewer-ready 3D model
 
-All powered by Google's Gemini API and the latest AI research.
+All powered by cutting-edge client-side WebGL and the latest 3D reconstruction research.
 
 ---
 
